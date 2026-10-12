@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Heat Register — Furnace Production Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  --bg:#161210; --bg2:#1e1a17; --panel:#211c19; --line:#39322c;
+  --ink:#ece5da; --ink-dim:#a89c8c; --ink-faint:#786d60;
+  --ember:#d4551e; --ember-soft:#8a3d1c; --brass:#c19a5b; --iron:#6b6055;
+  --ok:#6f8f5e; --warn:#c19a5b; --bad:#b8543f;
+  --r:2px;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+:root:not([data-theme="light"]){}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;min-height:100%}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;margin:0}
+.mono{font-family:'IBM Plex Mono',ui-monospace,Consolas,monospace}
+button,input,select{font-family:inherit;font-size:14px;color:var(--ink)}
+input,select{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;width:100%}
+input:focus,select:focus{outline:1px solid var(--ember);outline-offset:-1px}
+button{cursor:pointer}
+
+/* shell */
+.shell{display:flex;min-height:100vh}
+nav{width:190px;flex:0 0 190px;border-right:1px solid var(--line);padding:22px 0;background:var(--bg2);position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{padding:0 20px 20px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.brand .k{font-size:10px;letter-spacing:.04em;color:var(--ember);text-transform:none}
+.brand h1{font-size:19px;color:var(--ink)}
+.brand .sub{font-size:11px;color:var(--ink-faint);margin-top:3px}
+.tab{display:block;width:100%;text-align:left;background:none;border:none;padding:10px 20px;color:var(--ink-dim);font-size:13.5px;border-left:2px solid transparent}
+.tab:hover{color:var(--ink);background:rgba(255,255,255,.02)}
+.tab.active{color:var(--ink);border-left-color:var(--ember);background:rgba(212,85,30,.07);font-weight:500}
+.tab .n{color:var(--ink-faint);font-size:11px;float:right}
+main{flex:1;min-width:0;padding:26px 30px 60px;max-width:1180px}
+.top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px;flex-wrap:wrap;gap:8px}
+.top h2{font-size:24px}
+.top .meta{color:var(--ink-faint);font-size:12px}
+
+/* panels */
+.panel{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:18px;margin-bottom:16px}
+.panel > h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-family:'Inter';font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:760px){.g2,.g3,.g4{grid-template-columns:1fr}nav{position:fixed;left:-190px;transition:left .2s;z-index:50}nav.open{left:0}main{padding:16px}.menubtn{display:inline-block!important}}
+label{display:block;font-size:11.5px;color:var(--ink-faint);margin-bottom:5px}
+.field{margin-bottom:0}
+
+/* metric strip */
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:18px}
+@media(max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)}}
+.metric{background:var(--panel);padding:16px 16px}
+.metric .v{font-family:'Fraunces';font-size:26px;color:var(--ember)}
+.metric .l{font-size:11px;color:var(--ink-faint);margin-top:3px}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--ink-faint);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);color:var(--ink)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+.num{text-align:right;font-family:'IBM Plex Mono'}
+.small{font-size:11.5px;color:var(--ink-faint)}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;border:1px solid var(--line);color:var(--ink-dim)}
+.pill.ok{border-color:var(--ok);color:var(--ok)}
+.pill.bad{border-color:var(--bad);color:var(--bad)}
+.pill.warn{border-color:var(--warn);color:var(--warn)}
+
+/* line-item rows in form */
+.line{display:grid;grid-template-columns:1fr 90px 90px 100px 28px;gap:8px;margin-bottom:8px;align-items:end}
+.line .rm{background:none;border:1px solid var(--line);color:var(--ink-faint);height:36px;border-radius:var(--r)}
+.line .rm:hover{color:var(--bad);border-color:var(--bad)}
+@media(max-width:560px){
+  .line{grid-template-columns:1fr 1fr;row-gap:6px}
+  .line > div:first-child{grid-column:1/-1}
+  .line .rm{grid-column:1/-1;height:30px;width:100%}
+}
+.warnline{color:var(--bad);font-size:12px;margin-top:6px}
+.filterbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
+.filterbar .field{min-width:150px;flex:1}
+.checkline{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-dim)}
+.checkline input{width:auto}
+.addline{background:none;border:1px dashed var(--line);color:var(--ink-dim);padding:7px 12px;border-radius:var(--r);font-size:12.5px;margin-top:2px}
+.addline:hover{border-color:var(--brass);color:var(--brass)}
+
+.btn{background:var(--ember);border:1px solid var(--ember);color:#fff;padding:9px 18px;border-radius:var(--r);font-weight:500;font-size:13.5px}
+.btn:hover{background:#b8451a}
+.btn.ghost{background:none;color:var(--ink-dim);border-color:var(--line)}
+.btn.ghost:hover{color:var(--ink);border-color:var(--ink-dim)}
+.btn.small{padding:5px 11px;font-size:12px}
+hr.sec{border:none;border-top:1px solid var(--line);margin:18px 0}
+.empty{color:var(--ink-faint);font-size:12.5px;padding:14px 0;text-align:center;font-style:italic}
+.menubtn{display:none;position:fixed;top:14px;left:14px;z-index:60;background:var(--panel);border:1px solid var(--line);color:var(--ink);width:34px;height:34px;border-radius:var(--r)}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+.subttl{font-size:12px;color:var(--brass);margin:14px 0 8px;font-weight:600}
+.stockbar{height:5px;background:var(--bg2);border-radius:3px;overflow:hidden;margin-top:4px}
+.stockbar i{display:block;height:100%;background:var(--ember)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--ember);color:var(--ink);padding:10px 18px;border-radius:var(--r);font-size:13px;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+.confirming{color:var(--bad)!important;border-color:var(--bad)!important}
+.syncbadge{margin:18px 20px 0;padding:9px 10px;border:1px solid var(--line);border-radius:var(--r);font-size:11.5px;color:var(--ink-dim);line-height:1.4}
+.syncbadge i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--iron);margin-right:7px}
+.syncbadge.synced i{background:var(--ok)}
+.syncbadge.syncing i,.syncbadge.pulling i{background:var(--warn)}
+.syncbadge.error{border-color:var(--bad);color:var(--bad)}
+.syncbadge.error i{background:var(--bad)}
+.syncbadge .small{margin-top:4px;color:var(--bad)}
+</style>
+</head>
+<body>
+<button class="menubtn" onclick="document.querySelector('nav').classList.toggle('open')">☰</button>
+<div class="shell">
+<nav>
+  <div class="brand"><div class="k mono">NAMO STEELS</div><h1>Heat Register</h1><div class="sub">Furnace production ledger</div></div>
+  <button class="tab" data-tab="dash">Dashboard</button>
+  <button class="tab" data-tab="newheat">Log a Heat</button>
+  <button class="tab" data-tab="heats">Heat Log</button>
+  <button class="tab" data-tab="stock">Material Stock</button>
+  <button class="tab" data-tab="assets">Fixed Assets</button>
+  <button class="tab" data-tab="reports">Yield &amp; Duration</button>
+  <button class="tab" data-tab="settings">Sheet &amp; Sync</button>
+  <div id="syncbadge" class="syncbadge local"><i></i>Not connected to a Sheet</div>
+</nav>
+<main id="main"></main>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ---------- storage ---------- */
+const DB_KEY='heat_register_cache_v1';      // local copy, so the app opens instantly and survives being offline
+const CFG_KEY='heat_register_cfg_v1';       // Apps Script URL + access token (never stored in the repo)
+const DIRTY_KEY='heat_register_dirty_v1';   // local edits not yet confirmed in the Sheet
+const SYNCED_KEY='heat_register_synced_v1'; // this device has loaded from / saved to the current Sheet at least once
+function hasSynced(){ try{ return localStorage.getItem(SYNCED_KEY)==='1'; }catch(e){ return false; } }
+function markSynced(v){ try{ localStorage.setItem(SYNCED_KEY, v?'1':'0'); }catch(e){} }
+function emptyDB(){ return {heats:[], materialsIn:[], assets:[], nextHeat:1, nextMat:1, nextAsset:1}; }
+function normalizeDB(d){
+  const e = emptyDB(); d = d||{};
+  return {...e, ...d, heats:d.heats||[], materialsIn:d.materialsIn||[], assets:d.assets||[], nextHeat:d.nextHeat||1};
+}
+function loadDB(){
+  try{const raw=localStorage.getItem(DB_KEY); if(raw) return normalizeDB(JSON.parse(raw));}catch(e){}
+  return emptyDB();
+}
+function writeLocal(){ try{localStorage.setItem(DB_KEY, JSON.stringify(db));}catch(e){console.error('local save failed',e);} }
+let db = loadDB();
+
+/* ---------- Google Sheet sync (via Apps Script web app) ---------- */
+let cfg = (()=>{ try{ return JSON.parse(localStorage.getItem(CFG_KEY))||{}; }catch(e){ return {}; } })();
+let syncState = 'local', syncMsg = '', sheetUrl = '';
+let pulled = false, pushing = false, pushTimer = null, pullRetry = null, ver = 0;
+let dirty = (()=>{ try{ return localStorage.getItem(DIRTY_KEY)==='1'; }catch(e){ return false; } })();
+function setDirty(v){ dirty=v; try{ localStorage.setItem(DIRTY_KEY, v?'1':'0'); }catch(e){} }
+
+function setSync(state,msg){
+  syncState=state; syncMsg=msg||'';
+  const el=document.getElementById('syncbadge'); if(!el) return;
+  const label = {local:'Not connected to a Sheet', pulling:'Loading from Sheet…', syncing:'Saving to Sheet…', synced:'Synced with Google Sheet', error:'Sync problem'}[state];
+  el.className='syncbadge '+state;
+  el.innerHTML = '<i></i>'+label+(msg && state==='error' ? '<div class="small">'+msg+'</div>' : '');
+}
+async function api(payload){
+  const res = await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...payload,token:cfg.token}),redirect:'follow'});
+  let j; try{ j = await res.json(); }catch(e){ throw new Error('The Web app URL did not answer correctly. Check it is the /exec link and access is set to Anyone.'); }
+  if(!j.ok) throw new Error(j.error||'Request failed');
+  return j;
+}
+async function pullDB(){
+  if(!cfg.url||!cfg.token){ setSync('local'); return; }
+  setSync('pulling');
+  try{
+    const j = await api({action:'load'});
+    sheetUrl = j.sheetUrl||'';
+    const remote = normalizeDB(j.db);
+    const remoteEmpty = !remote.heats.length && !remote.materialsIn.length && !remote.assets.length;
+    const localHas = db.heats.length || db.materialsIn.length || db.assets.length;
+    pulled = true;
+    if(remoteEmpty && localHas){ await pushDB(); }                       // first connect: send this device's data up
+    else if(!hasSynced() && localHas && !remoteEmpty){                   // this device never saw the Sheet: merge, never overwrite
+      db = mergeIntoRemote(remote, db); writeLocal(); ver++; setDirty(true);
+      showToast('Your offline entries were merged into the Sheet.'); await pushDB();
+    }
+    else if(dirty){ await pushDB(); }                                    // normal case: local edits win
+    else { db = remote; writeLocal(); markSynced(true); setSync('synced'); if(activeTab!=='newheat') render(); }
+  }catch(e){
+    setSync('error', e.message);
+    clearTimeout(pullRetry); pullRetry = setTimeout(()=>{ if(!pulled) pullDB(); }, 15000); // keep trying until the Sheet answers
+  }
+}
+// union by id; local-only heats get fresh heat numbers so nothing in the Sheet is replaced
+function mergeIntoRemote(remote, local){
+  const out = normalizeDB(JSON.parse(JSON.stringify(remote)));
+  const heatIds = new Set(out.heats.map(h=>h.id)); let next = out.nextHeat;
+  local.heats.forEach(h=>{ if(!heatIds.has(h.id)) out.heats.push({...h, heatNo: next++}); });
+  out.nextHeat = next;
+  const recIds = new Set(out.materialsIn.map(m=>m.id));
+  local.materialsIn.forEach(m=>{ if(!recIds.has(m.id)) out.materialsIn.push(m); });
+  const assetIds = new Set(out.assets.map(a=>a.id));
+  local.assets.forEach(a=>{ if(!assetIds.has(a.id)) out.assets.push(a); });
+  return out;
+}
+async function pushDB(){
+  if(!cfg.url||!cfg.token||!pulled) return;
+  if(pushing) return;
+  pushing = true; const mine = ver; setSync('syncing');
+  try{
+    await api({action:'save', db});
+    pushing = false;
+    markSynced(true);
+    if(ver===mine){ setDirty(false); setSync('synced'); if(activeTab==='settings') render(); }
+    else { schedulePush(); }
+  }catch(e){
+    pushing = false; setSync('error', e.message);
+    clearTimeout(pushTimer); pushTimer = setTimeout(pushDB, 15000); // retry
+  }
+}
+function schedulePush(){ clearTimeout(pushTimer); pushTimer = setTimeout(pushDB, 700); }
+function saveDB(){
+  writeLocal(); ver++; setDirty(true);
+  if(cfg.url && cfg.token){ if(pulled) schedulePush(); else pullDB(); } else setSync('local');
+}
+window.addEventListener('online', ()=>{ if(!pulled) pullDB(); else if(dirty) pushDB(); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && cfg.url && pulled && !dirty && !pushing) pullDB(); });
+
+/* ---------- helpers ---------- */
+const fmt = n => (Math.round((+n||0)*100)/100).toLocaleString('en-IN',{maximumFractionDigits:2});
+const rs = n => '₹'+fmt(n);
+const uid = ()=> Math.random().toString(36).slice(2,9);
+function todayStr(){return new Date().toISOString().slice(0,10);}
+
+// popups (confirm/alert) don't show inside a sandboxed published page — use these instead
+let toastTimer=null;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
+}
+// click once to arm, click again within 3s to actually run the destructive action
+function confirmAction(btn, fn){
+  if(btn.dataset.armed==='1'){
+    clearTimeout(+btn.dataset.timer);
+    fn();
+  } else {
+    const original = btn.textContent;
+    btn.dataset.armed='1'; btn.dataset.original=original;
+    btn.textContent='sure?'; btn.classList.add('confirming');
+    const t = setTimeout(()=>{ btn.dataset.armed=''; btn.textContent=original; btn.classList.remove('confirming'); }, 3000);
+    btn.dataset.timer = t;
+  }
+}
+
+// derive current stock per material name from materialsIn (purchases) minus heat consumption
+function stockLevels(){
+  const stock = {}; // name -> {in, used, unit, lastRate}
+  db.materialsIn.forEach(m=>{
+    stock[m.name] = stock[m.name] || {in:0, used:0, unit:m.unit||'kg', lastRate:m.rate};
+    stock[m.name].in += (+m.qty||0);
+    stock[m.name].lastRate = m.rate;
+    if(m.unit) stock[m.name].unit = m.unit;
+  });
+  db.heats.forEach(h=>{
+    (h.materials||[]).forEach(mi=>{
+      stock[mi.name] = stock[mi.name] || {in:0, used:0, unit:'kg', lastRate:mi.rate};
+      stock[mi.name].used += (+mi.qty||0);
+    });
+    (h.chemicals||[]).forEach(ci=>{
+      stock[ci.name] = stock[ci.name] || {in:0, used:0, unit:'kg', lastRate:ci.rate};
+      stock[ci.name].used += (+ci.qty||0);
+    });
+  });
+  return stock;
+}
+
+// every material/chemical name seen anywhere, for autocomplete
+function allMaterialNames(){
+  const set = new Set();
+  db.materialsIn.forEach(m=>set.add(m.name));
+  db.heats.forEach(h=>{ (h.materials||[]).forEach(m=>set.add(m.name)); (h.chemicals||[]).forEach(c=>set.add(c.name)); });
+  return [...set].filter(Boolean).sort();
+}
+function matNameDatalist(){
+  return `<datalist id="matNamesList">${allMaterialNames().map(n=>`<option value="${n}">`).join('')}</datalist>`;
+}
+
+// depreciation across assets, split by how useful life was defined (straight line either way)
+function monthlyDepFromTimeAssets(){ // assets whose life is in months -> ₹/month
+  return db.assets.filter(a=>a.lifeType!=='heats').reduce((s,a)=>{
+    const life = (+a.lifeValue||1);
+    const salvage = +a.salvage||0;
+    return s + Math.max(0,((+a.cost||0)-salvage)/life);
+  },0);
+}
+function perHeatDepFromUsageAssets(){ // assets whose life is in heats -> ₹/heat
+  return db.assets.filter(a=>a.lifeType==='heats').reduce((s,a)=>{
+    const life = (+a.lifeValue||1);
+    const salvage = +a.salvage||0;
+    return s + Math.max(0,((+a.cost||0)-salvage)/life);
+  },0);
+}
+// backward-compatible alias used by older callers
+function monthlyDep(){ return monthlyDepFromTimeAssets(); }
+
+function heatCost(h){
+  const matCost = (h.materials||[]).reduce((s,m)=>s+(+m.qty||0)*(+m.rate||0),0);
+  const chemCost = (h.chemicals||[]).reduce((s,c)=>s+(+c.qty||0)*(+c.rate||0),0);
+  const total = matCost + chemCost + (+h.labour||0) + (+h.depreciation||0) + (+h.overhead||0);
+  const out = +h.outputQty||0;
+  const inputQty = (h.materials||[]).reduce((s,m)=>s+(+m.qty||0),0);
+  const yieldPct = inputQty>0 ? (out/inputQty*100) : 0;
+  return {matCost,chemCost,total, perKg: out>0? total/out : 0, inputQty, yieldPct};
+}
+
+/* ---------- routing ---------- */
+let activeTab = 'dash';
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{setTab(b.dataset.tab);}));
+function setTab(t){
+  activeTab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  document.querySelector('nav').classList.remove('open');
+  render();
+}
+
+/* ---------- render dispatch ---------- */
+function render(){
+  const main = document.getElementById('main');
+  if(activeTab==='dash') main.innerHTML = viewDash();
+  else if(activeTab==='newheat') { main.innerHTML = viewNewHeat(); bindNewHeat(); }
+  else if(activeTab==='heats') { main.innerHTML = viewHeats(); bindHeatFilters(); }
+  else if(activeTab==='stock') { main.innerHTML = viewStock(); bindStock(); }
+  else if(activeTab==='assets') { main.innerHTML = viewAssets(); bindAssets(); }
+  else if(activeTab==='reports') main.innerHTML = viewReports();
+  else if(activeTab==='settings') { main.innerHTML = viewSettings(); bindSettings(); }
+}
+
+/* ---------- DASHBOARD ---------- */
+function viewDash(){
+  const heats = db.heats;
+  const n = heats.length;
+  const totalOut = heats.reduce((s,h)=>s+(+h.outputQty||0),0);
+  const avgYield = n? (heats.reduce((s,h)=>s+heatCost(h).yieldPct,0)/n) : 0;
+  const avgCostKg = totalOut>0 ? heats.reduce((s,h)=>s+heatCost(h).total,0)/totalOut : 0;
+  const avgDur = n? (heats.reduce((s,h)=>s+(+h.duration||0),0)/n) : 0;
+  const stock = stockLevels();
+  const lowStock = Object.entries(stock).filter(([k,v])=> (v.in - v.used) < (v.in*0.1) && v.in>0).length;
+
+  const recent = [...heats].sort((a,b)=> (b.date||'').localeCompare(a.date||'')).slice(0,8);
+
+  return `
+  <div class="top"><h2>Furnace Dashboard</h2><div class="meta mono">${n} heats logged · updated ${new Date().toLocaleDateString('en-IN')}</div></div>
+  <div class="metrics">
+    <div class="metric"><div class="v mono">${n}</div><div class="l">Heats to date</div></div>
+    <div class="metric"><div class="v mono">${fmt(totalOut)} kg</div><div class="l">Total output</div></div>
+    <div class="metric"><div class="v mono">${fmt(avgYield)}%</div><div class="l">Avg yield</div></div>
+    <div class="metric"><div class="v mono">${rs(avgCostKg)}</div><div class="l">Avg cost / kg output</div></div>
+    <div class="metric"><div class="v mono">${fmt(avgDur)} hr</div><div class="l">Avg heat duration</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="panel">
+      <h3>Recent Heats</h3>
+      ${recent.length? `<table><thead><tr><th>Heat #</th><th>Date</th><th>Furnace</th><th class="num">Output kg</th><th class="num">Yield</th><th class="num">Cost/kg</th></tr></thead><tbody>
+        ${recent.map(h=>{const c=heatCost(h);return `<tr><td class="mono">${h.heatNo}</td><td>${h.date}</td><td>${h.furnace||'—'}</td><td class="num">${fmt(h.outputQty)}</td><td class="num">${fmt(c.yieldPct)}%</td><td class="num">${rs(c.perKg)}</td></tr>`}).join('')}
+      </tbody></table>` : `<div class="empty">No heats logged yet. Start on "Log a Heat".</div>`}
+    </div>
+    <div class="panel">
+      <h3>Stock Watch</h3>
+      ${Object.keys(stock).length? renderStockMini(stock) : `<div class="empty">No materials received yet.</div>`}
+      ${lowStock>0? `<div class="small" style="margin-top:10px;color:var(--warn)">⚠ ${lowStock} material(s) below 10% of received quantity.</div>`:''}
+    </div>
+  </div>`;
+}
+function renderStockMini(stock){
+  const rows = Object.entries(stock).sort((a,b)=>b[1].in-a[1].in).slice(0,6);
+  return `<table><thead><tr><th>Material</th><th class="num">Balance</th></tr></thead><tbody>
+    ${rows.map(([name,v])=>{
+      const bal = v.in - v.used; const pct = v.in>0? Math.max(0,Math.min(100,bal/v.in*100)):0;
+      return `<tr><td>${name}<div class="stockbar"><i style="width:${pct}%"></i></div></td><td class="num mono">${fmt(bal)} ${v.unit}</td></tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+
+/* ---------- NEW HEAT FORM (handles new / edit / repeat) ---------- */
+let editingHeatId = null; // null = new heat
+let draft = {materials:[{name:'',qty:'',rate:''}], chemicals:[{name:'',qty:'',rate:''}]};
+let formVals = {date:'', furnace:'', product:'', duration:'', labour:'', dep:'', oh:'', out:'', grade:'', notes:''};
+
+function loadHeatIntoForm(h, keepHeatIdentity){
+  draft = {
+    materials: (h.materials||[{name:'',qty:'',rate:''}]).map(m=>({...m})),
+    chemicals: (h.chemicals||[{name:'',qty:'',rate:''}]).length ? (h.chemicals||[]).map(c=>({...c})) : [{name:'',qty:'',rate:''}]
+  };
+  if(draft.materials.length===0) draft.materials=[{name:'',qty:'',rate:''}];
+  formVals = {
+    date: keepHeatIdentity ? h.date : todayStr(),
+    furnace: h.furnace||'', product: h.product||'', duration: keepHeatIdentity? (h.duration||'') : '',
+    labour: h.labour||'', dep: h.depreciation||'', oh: h.overhead||'',
+    out: keepHeatIdentity? (h.outputQty||'') : '', grade: h.grade||'', notes: h.notes||''
+  };
+  editingHeatId = keepHeatIdentity ? h.id : null;
+}
+function editHeat(id){
+  const h = db.heats.find(x=>x.id===id); if(!h) return;
+  loadHeatIntoForm(h, true);
+  setTab('newheat');
+}
+function repeatLastHeat(){
+  const last = [...db.heats].sort((a,b)=>b.heatNo-a.heatNo)[0];
+  if(!last){ showToast('No previous heats to repeat yet.'); return; }
+  loadHeatIntoForm(last, false);
+  setTab('newheat');
+}
+function resetHeatForm(){
+  editingHeatId = null;
+  draft = {materials:[{name:'',qty:'',rate:''}], chemicals:[{name:'',qty:'',rate:''}]};
+  formVals = {date:todayStr(), furnace:'', product:'', duration:'', labour:'', dep:'', oh:'', out:'', grade:'', notes:''};
+  render();
+}
+
+function viewNewHeat(){
+  if(!formVals.date) formVals.date = todayStr();
+  const perDayFromTime = monthlyDepFromTimeAssets()/30;
+  const perHeatFromUsage = perHeatDepFromUsageAssets();
+  const suggestedDep = (perDayFromTime + perHeatFromUsage) > 0 ? (perDayFromTime + perHeatFromUsage).toFixed(0) : 0;
+  const heatNo = editingHeatId ? db.heats.find(h=>h.id===editingHeatId).heatNo : db.nextHeat;
+  return `
+  <div class="top">
+    <h2>${editingHeatId? 'Edit Heat #'+heatNo : 'Log a Heat'}</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="meta mono">${editingHeatId? 'editing existing record' : 'Heat #'+heatNo}</div>
+      ${editingHeatId? `<button class="btn ghost small" id="cancelEdit">cancel edit</button>` : `<button class="btn ghost small" id="repeatLast">↻ repeat last heat</button>`}
+    </div>
+  </div>
+
+  ${matNameDatalist()}
+
+  <div class="panel">
+    <h3>Heat Details</h3>
+    <div class="grid g4">
+      <div class="field"><label>Date</label><input id="f_date" type="date" value="${formVals.date}"></div>
+      <div class="field"><label>Furnace / Line</label><input id="f_furnace" placeholder="Furnace 1" value="${formVals.furnace}"></div>
+      <div class="field"><label>Charge / Product</label><input id="f_product" placeholder="Copper ingot" value="${formVals.product}"></div>
+      <div class="field"><label>Duration (hours)</label><input id="f_duration" type="number" step="0.1" placeholder="6.5" value="${formVals.duration}"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Raw Materials Charged</h3>
+    <div id="matLines"></div>
+    <button class="addline" id="addMat">+ add raw material</button>
+    <div id="matWarn"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Powders / Chemicals / Flux Added</h3>
+    <div id="chemLines"></div>
+    <button class="addline" id="addChem">+ add chemical / powder</button>
+    <div id="chemWarn"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Labour, Overhead &amp; Depreciation</h3>
+    <div class="grid g3">
+      <div class="field"><label>Labour cost for this heat (₹)</label><input id="f_labour" type="number" placeholder="1200" value="${formVals.labour}"></div>
+      <div class="field"><label>Depreciation allocated (₹) <span class="small">— suggested ${rs(suggestedDep)}/heat from Assets (time-based ÷30 + usage-based)</span></label><input id="f_dep" type="number" placeholder="${suggestedDep}" value="${formVals.dep}"></div>
+      <div class="field"><label>Other overhead (₹) <span class="small">power, gas, misc</span></label><input id="f_oh" type="number" placeholder="800" value="${formVals.oh}"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Output</h3>
+    <div class="grid g3">
+      <div class="field"><label>Output quantity (kg)</label><input id="f_out" type="number" placeholder="410" value="${formVals.out}"></div>
+      <div class="field"><label>Output grade / purity</label><input id="f_grade" placeholder="99.2% Cu" value="${formVals.grade}"></div>
+      <div class="field"><label>Notes</label><input id="f_notes" placeholder="optional" value="${formVals.notes}"></div>
+    </div>
+  </div>
+
+  <div id="liveCost" class="panel mono" style="color:var(--ink-dim);font-size:12.5px"></div>
+
+  <button class="btn" id="saveHeat">${editingHeatId? 'Update Heat #'+heatNo : 'Save Heat #'+heatNo}</button>
+  `;
+}
+function matLineRow(item,i,kind){
+  return `<div class="line" data-i="${i}" data-kind="${kind}">
+    <div><label>${i===0?'Material':''}</label><input class="li-name" list="matNamesList" placeholder="${kind==='mat'?'Alternator scrap':'Borax flux'}" value="${item.name||''}"></div>
+    <div><label>${i===0?'Qty (kg)':''}</label><input class="li-qty" type="number" step="0.01" placeholder="0" value="${item.qty||''}"></div>
+    <div><label>${i===0?'Rate ₹/kg':''}</label><input class="li-rate" type="number" step="0.01" placeholder="0" value="${item.rate||''}"></div>
+    <div><label>${i===0?'Line cost':''}</label><input class="li-cost mono" disabled value="${rs((item.qty||0)*(item.rate||0))}"></div>
+    <button class="rm" title="remove">✕</button>
+  </div>`;
+}
+function bindNewHeat(){
+  const matWrap = document.getElementById('matLines');
+  const chemWrap = document.getElementById('chemLines');
+  const stock = stockLevels();
+
+  function redraw(){
+    matWrap.innerHTML = draft.materials.map((m,i)=>matLineRow(m,i,'mat')).join('');
+    chemWrap.innerHTML = draft.chemicals.map((c,i)=>matLineRow(c,i,'chem')).join('');
+    wireLines();
+    updateLive();
+    checkStockWarnings();
+  }
+  function wireLines(){
+    document.querySelectorAll('#matLines .line, #chemLines .line').forEach(row=>{
+      const kind = row.dataset.kind, i=+row.dataset.i;
+      const arr = kind==='mat'? draft.materials : draft.chemicals;
+      row.querySelector('.li-name').addEventListener('input',e=>{arr[i].name=e.target.value;});
+      row.querySelector('.li-name').addEventListener('change',e=>{
+        const known = stock[e.target.value];
+        if(known && !arr[i].rate){ arr[i].rate = known.lastRate; row.querySelector('.li-rate').value = known.lastRate; row.querySelector('.li-cost').value = rs((+arr[i].qty||0)*(+known.lastRate||0)); }
+        checkStockWarnings();
+      });
+      row.querySelector('.li-qty').addEventListener('input',e=>{arr[i].qty=e.target.value; row.querySelector('.li-cost').value=rs((+e.target.value||0)*(+arr[i].rate||0)); updateLive(); checkStockWarnings();});
+      row.querySelector('.li-rate').addEventListener('input',e=>{arr[i].rate=e.target.value; row.querySelector('.li-cost').value=rs((+arr[i].qty||0)*(+e.target.value||0)); updateLive();});
+      row.querySelector('.rm').addEventListener('click',()=>{ if(arr.length>1){arr.splice(i,1);} else {arr[0]={name:'',qty:'',rate:''};} redraw();});
+    });
+  }
+  function checkStockWarnings(){
+    function warnFor(arr, elId){
+      const lines = [];
+      const seen = {};
+      arr.forEach(m=>{
+        if(!m.name || !(+m.qty>0)) return;
+        seen[m.name] = (seen[m.name]||0) + (+m.qty);
+      });
+      Object.entries(seen).forEach(([name,qty])=>{
+        const s = stock[name];
+        const balance = s ? (s.in - s.used) : 0;
+        if(!s || qty > balance){
+          lines.push(`⚠ ${name}: charging ${fmt(qty)} kg but only ${fmt(balance)} kg in stock${!s?' (never received)':''}.`);
+        }
+      });
+      document.getElementById(elId).innerHTML = lines.length ? `<div class="warnline">${lines.join('<br>')}</div>` : '';
+    }
+    warnFor(draft.materials,'matWarn');
+    warnFor(draft.chemicals,'chemWarn');
+  }
+  function updateLive(){
+    const matCost = draft.materials.reduce((s,m)=>s+(+m.qty||0)*(+m.rate||0),0);
+    const chemCost = draft.chemicals.reduce((s,c)=>s+(+c.qty||0)*(+c.rate||0),0);
+    const labour = +document.getElementById('f_labour').value||0;
+    const dep = +document.getElementById('f_dep').value||0;
+    const oh = +document.getElementById('f_oh').value||0;
+    const out = +document.getElementById('f_out').value||0;
+    const total = matCost+chemCost+labour+dep+oh;
+    document.getElementById('liveCost').innerHTML =
+      `Materials ${rs(matCost)}  +  Chemicals ${rs(chemCost)}  +  Labour ${rs(labour)}  +  Depreciation ${rs(dep)}  +  Overhead ${rs(oh)}  =  <span style="color:var(--ember)">Total ${rs(total)}</span>`
+      + (out>0? `   ·   Cost per kg output: <span style="color:var(--brass)">${rs(total/out)}</span>` : '');
+  }
+  document.getElementById('addMat').addEventListener('click',()=>{draft.materials.push({name:'',qty:'',rate:''});redraw();});
+  document.getElementById('addChem').addEventListener('click',()=>{draft.chemicals.push({name:'',qty:'',rate:''});redraw();});
+  ['f_labour','f_dep','f_oh','f_out'].forEach(id=>document.getElementById(id).addEventListener('input',updateLive));
+  const repeatBtn = document.getElementById('repeatLast'); if(repeatBtn) repeatBtn.addEventListener('click',repeatLastHeat);
+  const cancelBtn = document.getElementById('cancelEdit'); if(cancelBtn) cancelBtn.addEventListener('click',resetHeatForm);
+  document.getElementById('saveHeat').addEventListener('click',()=>{
+    const materials = draft.materials.filter(m=>m.name && (+m.qty||0)>0);
+    const chemicals = draft.chemicals.filter(c=>c.name && (+c.qty||0)>0);
+    if(materials.length===0){ showToast('Add at least one raw material with quantity before saving.'); return; }
+    const fields = {
+      date: document.getElementById('f_date').value || todayStr(),
+      furnace: document.getElementById('f_furnace').value,
+      product: document.getElementById('f_product').value,
+      duration: document.getElementById('f_duration').value,
+      materials, chemicals,
+      labour: document.getElementById('f_labour').value,
+      depreciation: document.getElementById('f_dep').value,
+      overhead: document.getElementById('f_oh').value,
+      outputQty: document.getElementById('f_out').value,
+      grade: document.getElementById('f_grade').value,
+      notes: document.getElementById('f_notes').value
+    };
+    if(editingHeatId){
+      const idx = db.heats.findIndex(h=>h.id===editingHeatId);
+      db.heats[idx] = {...db.heats[idx], ...fields};
+    } else {
+      db.heats.push({id: uid(), heatNo: db.nextHeat, ...fields});
+      db.nextHeat++;
+    }
+    saveDB();
+    resetHeatForm();
+    setTab('heats');
+  });
+  redraw();
+}
+
+/* ---------- HEAT LOG ---------- */
+let heatFilters = {from:'', to:'', furnace:'', q:''};
+function viewHeats(){
+  let heats = [...db.heats].sort((a,b)=>b.heatNo-a.heatNo);
+  if(heatFilters.from) heats = heats.filter(h=> (h.date||'') >= heatFilters.from);
+  if(heatFilters.to) heats = heats.filter(h=> (h.date||'') <= heatFilters.to);
+  if(heatFilters.furnace) heats = heats.filter(h=> h.furnace===heatFilters.furnace);
+  if(heatFilters.q) heats = heats.filter(h=> (h.product||'').toLowerCase().includes(heatFilters.q.toLowerCase()) || String(h.heatNo).includes(heatFilters.q));
+  const furnaceOptions = [...new Set(db.heats.map(h=>h.furnace).filter(Boolean))];
+
+  return `
+  <div class="top"><h2>Heat Log</h2><div class="meta mono">${heats.length} of ${db.heats.length} records · batch costing detail</div></div>
+  <div class="panel">
+    <div class="filterbar">
+      <div class="field"><label>From date</label><input id="hf_from" type="date" value="${heatFilters.from}"></div>
+      <div class="field"><label>To date</label><input id="hf_to" type="date" value="${heatFilters.to}"></div>
+      <div class="field"><label>Furnace</label><select id="hf_furnace"><option value="">All furnaces</option>${furnaceOptions.map(f=>`<option value="${f}" ${heatFilters.furnace===f?'selected':''}>${f}</option>`).join('')}</select></div>
+      <div class="field"><label>Search product / heat #</label><input id="hf_q" placeholder="e.g. copper ingot" value="${heatFilters.q}"></div>
+      <button class="btn ghost small" id="hf_clear">clear</button>
+    </div>
+  </div>
+  ${heats.length? `<div class="panel" style="padding:0">
+    <table><thead><tr>
+      <th>#</th><th>Date</th><th>Furnace</th><th>Product</th><th class="num">Dur (hr)</th>
+      <th class="num">Input kg</th><th class="num">Output kg</th><th class="num">Yield</th>
+      <th class="num">Total Cost</th><th class="num">₹/kg</th><th></th>
+    </tr></thead><tbody>
+    ${heats.map(h=>{
+      const c = heatCost(h);
+      return `<tr>
+        <td class="mono">${h.heatNo}</td><td>${h.date}</td><td>${h.furnace||'—'}</td><td>${h.product||'—'}</td>
+        <td class="num mono">${fmt(h.duration)}</td>
+        <td class="num mono">${fmt(c.inputQty)}</td>
+        <td class="num mono">${fmt(h.outputQty)}</td>
+        <td class="num mono"><span class="pill ${c.yieldPct>=85?'ok':c.yieldPct>=70?'warn':'bad'}">${fmt(c.yieldPct)}%</span></td>
+        <td class="num mono">${rs(c.total)}</td>
+        <td class="num mono">${rs(c.perKg)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn ghost small" onclick="toggleDetail('${h.id}')">detail</button>
+          <button class="btn ghost small" onclick="editHeat('${h.id}')">edit</button>
+          <button class="btn ghost small" onclick="deleteHeat('${h.id}', this)">del</button>
+        </td>
+      </tr>
+      <tr id="det-${h.id}" style="display:none"><td colspan="11" style="background:var(--bg2)">${heatDetail(h,c)}</td></tr>`;
+    }).join('')}
+    </tbody></table>
+  </div>` : `<div class="panel"><div class="empty">${db.heats.length? 'No heats match these filters.' : 'No heats logged yet.'}</div></div>`}
+  `;
+}
+function bindHeatFilters(){
+  const ids = {hf_from:'from', hf_to:'to', hf_furnace:'furnace', hf_q:'q'};
+  Object.entries(ids).forEach(([id,key])=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(id==='hf_furnace'?'change':'input', e=>{ heatFilters[key]=e.target.value; render(); });
+  });
+  const clearBtn = document.getElementById('hf_clear');
+  if(clearBtn) clearBtn.addEventListener('click',()=>{ heatFilters={from:'',to:'',furnace:'',q:''}; render(); });
+}
+function deleteHeat(id, btn){
+  confirmAction(btn, ()=>{ db.heats = db.heats.filter(h=>h.id!==id); saveDB(); showToast('Heat deleted.'); render(); });
+}
+function heatDetail(h,c){
+  const matRows = (h.materials||[]).map(m=>`<tr><td>${m.name}</td><td class="num mono">${fmt(m.qty)} kg</td><td class="num mono">${rs(m.rate)}</td><td class="num mono">${rs(m.qty*m.rate)}</td></tr>`).join('');
+  const chemRows = (h.chemicals||[]).map(cm=>`<tr><td>${cm.name}</td><td class="num mono">${fmt(cm.qty)} kg</td><td class="num mono">${rs(cm.rate)}</td><td class="num mono">${rs(cm.qty*cm.rate)}</td></tr>`).join('');
+  return `<div style="padding:14px 4px">
+    <div class="grid g2">
+      <div>
+        <div class="subttl">Raw materials</div>
+        <table><tbody>${matRows||'<tr><td class="small">none</td></tr>'}</tbody></table>
+        <div class="subttl">Chemicals / powders</div>
+        <table><tbody>${chemRows||'<tr><td class="small">none</td></tr>'}</tbody></table>
+      </div>
+      <div>
+        <div class="subttl">Cost build-up</div>
+        <table><tbody>
+          <tr><td>Materials</td><td class="num mono">${rs(c.matCost)}</td></tr>
+          <tr><td>Chemicals</td><td class="num mono">${rs(c.chemCost)}</td></tr>
+          <tr><td>Labour</td><td class="num mono">${rs(h.labour)}</td></tr>
+          <tr><td>Depreciation</td><td class="num mono">${rs(h.depreciation)}</td></tr>
+          <tr><td>Overhead</td><td class="num mono">${rs(h.overhead)}</td></tr>
+          <tr><td><strong>Total</strong></td><td class="num mono"><strong>${rs(c.total)}</strong></td></tr>
+        </tbody></table>
+        <div class="subttl">Output</div>
+        <div class="small">${fmt(h.outputQty)} kg output, grade ${h.grade||'—'}, from ${fmt(c.inputQty)} kg charged over ${fmt(h.duration)} hr. ${h.notes?('Note: '+h.notes):''}</div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleDetail(id){
+  const row = document.getElementById('det-'+id);
+  row.style.display = row.style.display==='none' ? '' : 'none';
+}
+
+/* ---------- STOCK ---------- */
+let editingStockId = null;
+let stockFormVals = {name:'', qty:'', unit:'kg', rate:''};
+let showLowStockOnly = false;
+function editStockReceipt(id){
+  const m = db.materialsIn.find(x=>x.id===id); if(!m) return;
+  editingStockId = id;
+  stockFormVals = {name:m.name, qty:m.qty, unit:m.unit||'kg', rate:m.rate};
+  render();
+}
+function deleteStockReceipt(id, btn){
+  confirmAction(btn, ()=>{ db.materialsIn = db.materialsIn.filter(m=>m.id!==id); saveDB(); showToast('Receipt deleted.'); render(); });
+}
+function resetStockForm(){ editingStockId=null; stockFormVals={name:'',qty:'',unit:'kg',rate:''}; render(); }
+
+function viewStock(){
+  const stock = stockLevels();
+  let rows = Object.entries(stock).sort((a,b)=>a[0].localeCompare(b[0]));
+  if(showLowStockOnly) rows = rows.filter(([,v])=> v.in>0 && (v.in-v.used) < v.in*0.1);
+  return `
+  <div class="top"><h2>Material Stock</h2><div class="meta mono">Received minus consumed across all heats</div></div>
+  ${matNameDatalist()}
+  <div class="panel">
+    <h3>${editingStockId? 'Edit Receipt' : 'Receive Material'}</h3>
+    <div class="grid g4">
+      <div class="field"><label>Material name</label><input id="s_name" list="matNamesList" placeholder="Alternator scrap" value="${stockFormVals.name}"></div>
+      <div class="field"><label>Quantity</label><input id="s_qty" type="number" placeholder="500" value="${stockFormVals.qty}"></div>
+      <div class="field"><label>Unit</label><select id="s_unit">
+        ${['kg','ton','litre','nos','bag'].map(u=>`<option value="${u}" ${stockFormVals.unit===u?'selected':''}>${u}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Rate ₹/unit</label><input id="s_rate" type="number" placeholder="210" value="${stockFormVals.rate}"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn" id="addStock">${editingStockId? 'Update Receipt' : 'Record Receipt'}</button>
+      ${editingStockId? `<button class="btn ghost" id="cancelStockEdit">cancel</button>` : ''}
+    </div>
+  </div>
+  <div class="panel">
+    <div class="checkline"><input type="checkbox" id="lowStockToggle" ${showLowStockOnly?'checked':''}> <label style="margin:0" for="lowStockToggle">Show only materials below 10% of received quantity</label></div>
+  </div>
+  <div class="panel" style="padding:0">
+    <table><thead><tr><th>Material</th><th class="num">Received</th><th class="num">Consumed</th><th class="num">Balance</th><th class="num">Last Rate</th><th class="num">Balance Value</th></tr></thead><tbody>
+    ${rows.length? rows.map(([name,v])=>{
+      const bal = v.in - v.used;
+      return `<tr><td>${name}</td><td class="num mono">${fmt(v.in)} ${v.unit}</td><td class="num mono">${fmt(v.used)} ${v.unit}</td><td class="num mono">${fmt(bal)} ${v.unit}</td><td class="num mono">${rs(v.lastRate)}</td><td class="num mono">${rs(bal*v.lastRate)}</td></tr>`;
+    }).join('') : `<tr><td class="empty" colspan="6">${showLowStockOnly? 'Nothing below the low-stock threshold.' : 'No receipts recorded yet.'}</td></tr>`}
+    </tbody></table>
+  </div>
+  <div class="panel">
+    <h3>Receipt History</h3>
+    ${db.materialsIn.length? `<table><thead><tr><th>Date</th><th>Material</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Value</th><th></th></tr></thead><tbody>
+      ${[...db.materialsIn].reverse().map(m=>`<tr><td>${m.date}</td><td>${m.name}</td><td class="num mono">${fmt(m.qty)} ${m.unit}</td><td class="num mono">${rs(m.rate)}</td><td class="num mono">${rs(m.qty*m.rate)}</td>
+        <td style="white-space:nowrap"><button class="btn ghost small" onclick="editStockReceipt('${m.id}')">edit</button> <button class="btn ghost small" onclick="deleteStockReceipt('${m.id}', this)">del</button></td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty">Nothing received yet.</div>`}
+  </div>
+  `;
+}
+function bindStock(){
+  const addStockBtn = document.getElementById('addStock');
+  if(addStockBtn){
+    addStockBtn.addEventListener('click',()=>{
+      const name=document.getElementById('s_name').value;
+      const qty=document.getElementById('s_qty').value;
+      const unit=document.getElementById('s_unit').value||'kg';
+      const rate=document.getElementById('s_rate').value;
+      if(!name||!qty){showToast('Material name and quantity are required.');return;}
+      if(editingStockId){
+        const idx = db.materialsIn.findIndex(m=>m.id===editingStockId);
+        db.materialsIn[idx] = {...db.materialsIn[idx], name, qty, unit, rate: rate||0};
+      } else {
+        db.materialsIn.push({id:uid(),date:todayStr(),name,qty,unit,rate:rate||0});
+      }
+      saveDB(); resetStockForm();
+    });
+  }
+  const cancelBtn = document.getElementById('cancelStockEdit');
+  if(cancelBtn) cancelBtn.addEventListener('click', resetStockForm);
+  const lowToggle = document.getElementById('lowStockToggle');
+  if(lowToggle) lowToggle.addEventListener('change', e=>{ showLowStockOnly = e.target.checked; render(); });
+}
+
+/* ---------- ASSETS / DEPRECIATION ---------- */
+let editingAssetId = null;
+let assetFormVals = {name:'', cost:'', lifeType:'months', lifeValue:'', salvage:''};
+function editAsset(id){
+  const a = db.assets.find(x=>x.id===id); if(!a) return;
+  editingAssetId = id;
+  assetFormVals = {name:a.name, cost:a.cost, lifeType:a.lifeType||'months', lifeValue:a.lifeValue, salvage:a.salvage};
+  render();
+}
+function deleteAsset(id, btn){
+  confirmAction(btn, ()=>{ db.assets = db.assets.filter(a=>a.id!==id); saveDB(); showToast('Asset removed.'); render(); });
+}
+function resetAssetForm(){ editingAssetId=null; assetFormVals={name:'',cost:'',lifeType:'months',lifeValue:'',salvage:''}; render(); }
+
+function viewAssets(){
+  const timeDep = monthlyDepFromTimeAssets();
+  const usageDep = perHeatDepFromUsageAssets();
+  const isHeatsType = assetFormVals.lifeType==='heats';
+  return `
+  <div class="top"><h2>Fixed Assets &amp; Depreciation</h2><div class="meta mono">Straight-line, by time or by usage — feeds the per-heat suggestion</div></div>
+  <div class="metrics" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="metric"><div class="v mono">${rs(timeDep)}</div><div class="l">Monthly dep. — time-based assets</div></div>
+    <div class="metric"><div class="v mono">${rs(usageDep)}</div><div class="l">Per-heat dep. — usage-based assets</div></div>
+    <div class="metric"><div class="v mono">${rs(timeDep/30 + usageDep)}</div><div class="l">Suggested total per heat</div></div>
+  </div>
+  <div class="panel">
+    <h3>${editingAssetId? 'Edit Asset' : 'Add Asset'}</h3>
+    <div class="grid g4">
+      <div class="field"><label>Asset name</label><input id="a_name" placeholder="Induction furnace" value="${assetFormVals.name}"></div>
+      <div class="field"><label>Cost (₹)</label><input id="a_cost" type="number" placeholder="1800000" value="${assetFormVals.cost}"></div>
+      <div class="field"><label>Useful life is measured in</label>
+        <select id="a_lifetype">
+          <option value="months" ${!isHeatsType?'selected':''}>Months</option>
+          <option value="heats" ${isHeatsType?'selected':''}>Number of heats / uses</option>
+        </select>
+      </div>
+      <div class="field"><label id="a_life_label">Useful life (${isHeatsType?'number of heats':'months'})</label><input id="a_life" type="number" placeholder="${isHeatsType?'5000':'120'}" value="${assetFormVals.lifeValue}"></div>
+    </div>
+    <div class="grid g4" style="margin-top:14px">
+      <div class="field"><label>Salvage value (₹)</label><input id="a_salv" type="number" placeholder="0" value="${assetFormVals.salvage}"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn" id="addAsset">${editingAssetId? 'Update Asset' : 'Add Asset'}</button>
+      ${editingAssetId? `<button class="btn ghost" id="cancelAssetEdit">cancel</button>` : ''}
+    </div>
+  </div>
+  <div class="panel" style="padding:0">
+    <table><thead><tr><th>Asset</th><th class="num">Cost</th><th class="num">Useful Life</th><th class="num">Salvage</th><th class="num">Depreciation Rate</th><th></th></tr></thead><tbody>
+    ${db.assets.length? db.assets.map(a=>{
+      const isHeats = a.lifeType==='heats';
+      const rate = Math.max(0,((+a.cost||0)-(+a.salvage||0))/(+a.lifeValue||1));
+      const lifeLabel = isHeats? `${fmt(a.lifeValue)} heats` : `${fmt(a.lifeValue)} months`;
+      const rateLabel = isHeats? `${rs(rate)} / heat` : `${rs(rate)} / month`;
+      return `<tr><td>${a.name}</td><td class="num mono">${rs(a.cost)}</td><td class="num mono">${lifeLabel}</td><td class="num mono">${rs(a.salvage)}</td><td class="num mono">${rateLabel}</td>
+        <td style="white-space:nowrap"><button class="btn ghost small" onclick="editAsset('${a.id}')">edit</button> <button class="btn ghost small" onclick="deleteAsset('${a.id}', this)">remove</button></td></tr>`;
+    }).join('') : '<tr><td class="empty" colspan="6">No assets registered yet.</td></tr>'}
+    </tbody></table>
+  </div>
+  `;
+}
+function bindAssets(){
+  const typeSel = document.getElementById('a_lifetype');
+  if(typeSel) typeSel.addEventListener('change',()=>{
+    const isHeats = typeSel.value==='heats';
+    document.getElementById('a_life_label').textContent = isHeats ? 'Useful life (number of heats)' : 'Useful life (months)';
+    document.getElementById('a_life').placeholder = isHeats ? '5000' : '120';
+  });
+  const btn = document.getElementById('addAsset');
+  if(btn) btn.addEventListener('click',()=>{
+    const name=document.getElementById('a_name').value;
+    const cost=document.getElementById('a_cost').value;
+    const lifeType=document.getElementById('a_lifetype').value;
+    const life=document.getElementById('a_life').value;
+    const salv=document.getElementById('a_salv').value;
+    if(!name||!cost||!life){showToast('Name, cost and useful life are required.');return;}
+    if(editingAssetId){
+      const idx = db.assets.findIndex(a=>a.id===editingAssetId);
+      db.assets[idx] = {...db.assets[idx], name, cost, lifeType, lifeValue:life, salvage:salv||0};
+    } else {
+      db.assets.push({id:uid(),name,cost,lifeType,lifeValue:life,salvage:salv||0});
+    }
+    saveDB(); resetAssetForm();
+  });
+  const cancelBtn = document.getElementById('cancelAssetEdit');
+  if(cancelBtn) cancelBtn.addEventListener('click', resetAssetForm);
+}
+
+/* ---------- REPORTS: yield & duration by material ---------- */
+function viewReports(){
+  const byMat = {}; // material -> {heats:Set, totalQty, totalDur, totalOutAttrib}
+  db.heats.forEach(h=>{
+    const dur = +h.duration||0;
+    (h.materials||[]).forEach(m=>{
+      byMat[m.name] = byMat[m.name] || {heats:0, qty:0, dur:0};
+      byMat[m.name].heats += 1;
+      byMat[m.name].qty += (+m.qty||0);
+      byMat[m.name].dur += dur;
+    });
+  });
+  const rows = Object.entries(byMat).sort((a,b)=>b[1].heats-a[1].heats);
+
+  const furnaceStats = {};
+  db.heats.forEach(h=>{
+    const f = h.furnace||'Unspecified';
+    furnaceStats[f] = furnaceStats[f]||{heats:0,out:0,dur:0};
+    furnaceStats[f].heats++; furnaceStats[f].out+=(+h.outputQty||0); furnaceStats[f].dur+=(+h.duration||0);
+  });
+
+  return `
+  <div class="top"><h2>Yield &amp; Duration</h2><div class="meta mono">Per-material and per-furnace performance across all heats</div></div>
+  <div class="panel">
+    <h3>Time-to-Complete by Raw Material</h3>
+    ${rows.length? `<table><thead><tr><th>Material</th><th class="num">Heats used in</th><th class="num">Total qty charged</th><th class="num">Avg heat duration</th></tr></thead><tbody>
+      ${rows.map(([name,v])=>`<tr><td>${name}</td><td class="num mono">${v.heats}</td><td class="num mono">${fmt(v.qty)} kg</td><td class="num mono">${fmt(v.dur/v.heats)} hr</td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty">Log some heats to see this breakdown.</div>`}
+  </div>
+  <div class="panel">
+    <h3>Furnace Throughput</h3>
+    ${Object.keys(furnaceStats).length? `<table><thead><tr><th>Furnace</th><th class="num">Heats run</th><th class="num">Total output</th><th class="num">Avg duration</th></tr></thead><tbody>
+      ${Object.entries(furnaceStats).map(([f,v])=>`<tr><td>${f}</td><td class="num mono">${v.heats}</td><td class="num mono">${fmt(v.out)} kg</td><td class="num mono">${fmt(v.dur/v.heats)} hr</td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty">No furnace data yet.</div>`}
+  </div>
+  `;
+}
+
+/* ---------- init ---------- */
+/* ---------- SETTINGS: connect to the Google Sheet ---------- */
+function viewSettings(){
+  const connected = !!(cfg.url && cfg.token);
+  return `
+  <div class="top"><h2>Sheet &amp; Sync</h2><div class="meta mono">${connected? (dirty? 'unsaved changes waiting to sync' : 'all changes saved to the Sheet') : 'running on this device only'}</div></div>
+  <div class="panel">
+    <h3>Connect to your Google Sheet</h3>
+    <div class="grid g2">
+      <div class="field"><label>Web app URL (ends in /exec)</label><input id="c_url" placeholder="https://script.google.com/macros/s/…/exec" value="${cfg.url||''}"></div>
+      <div class="field"><label>Access token (from the Setup tab of your Sheet)</label><input id="c_token" type="password" placeholder="paste token" value="${cfg.token||''}"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="c_save">Save &amp; connect</button>
+      ${connected? '<button class="btn ghost" id="c_sync">Sync now</button><button class="btn ghost" id="c_off">Disconnect</button>' : ''}
+      ${sheetUrl? `<a class="btn ghost" style="text-decoration:none" href="${sheetUrl}" target="_blank" rel="noopener">Open Google Sheet ↗</a>` : ''}
+    </div>
+    <div class="small" style="margin-top:12px">The URL and token are kept in this browser only. Every change you make is saved on this device first, then written to the Sheet a moment later; if you are offline it retries automatically.</div>
+  </div>
+  <div class="panel">
+    <h3>How the Sheet is laid out</h3>
+    <table><tbody>
+      <tr><td>Heats</td><td class="small">one row per heat: date, furnace, duration, input kg, output kg, yield, each cost line, total, cost per kg</td></tr>
+      <tr><td>HeatItems</td><td class="small">every raw material and chemical charged, with quantity, rate and cost, linked by heat number</td></tr>
+      <tr><td>StockReceipts</td><td class="small">every material receipt</td></tr>
+      <tr><td>Assets</td><td class="small">fixed assets with life (months or heats) and depreciation rate</td></tr>
+    </tbody></table>
+    <div class="small" style="margin-top:10px">Edit data in the app, not in the Sheet: the app rewrites these tabs on each save. The Sheet is for reading, filtering, pivoting and charting. Google Sheets keeps version history (File → Version history) if you ever need to roll back.</div>
+  </div>`;
+}
+function bindSettings(){
+  const save=document.getElementById('c_save');
+  if(save) save.addEventListener('click',()=>{
+    const url=document.getElementById('c_url').value.trim();
+    const token=document.getElementById('c_token').value.trim();
+    if(!url||!token){ showToast('Enter both the Web app URL and the access token.'); return; }
+    if(!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)){ showToast('That does not look like an Apps Script /exec URL.'); return; }
+    if(url!==cfg.url) markSynced(false);
+    cfg={url,token}; try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
+    pulled=false; showToast('Connecting…');
+    pullDB().then(()=>{ if(syncState==='synced'){ showToast('Connected. Your data now lives in the Sheet.'); } render(); });
+  });
+  const sync=document.getElementById('c_sync');
+  if(sync) sync.addEventListener('click',()=>{ pulled=false; pullDB().then(()=>{ showToast(syncState==='synced'?'Synced.':'Sync failed: '+syncMsg); render(); }); });
+  const off=document.getElementById('c_off');
+  if(off) off.addEventListener('click',()=>{ cfg={}; pulled=false; sheetUrl=''; markSynced(false); try{ localStorage.removeItem(CFG_KEY); }catch(e){} setSync('local'); showToast('Disconnected. Data stays on this device.'); render(); });
+}
+
+/* ---------- init ---------- */
+if(cfg.url && cfg.token){ setTab('dash'); pullDB(); }
+else { setTab('settings'); }
+</script>
+</body>
+</html>
